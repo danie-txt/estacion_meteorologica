@@ -45,6 +45,7 @@ volatile bool g_bPendingSend = false;
 #define ALARMA      6
 #define XILOFONO    65
 #define TROMPETA    69
+#define SILENCIO    0
 
 // === NOTAS IMPORTANTES ===
 #define DO_CENTRAL  60
@@ -55,8 +56,19 @@ volatile bool g_bPendingSend = false;
 #define LA          69
 #define SI          71
 #define DO_AGUDO    72
-#define LA_BAJA     57
-#define LA_ALTA     81
+
+// === NOTAS (agudas para bip) ===
+#define LA_AGUDA    81  // A5 (880 Hz) → BIP agudo
+#define LA_BAJA     57  // A3 (220 Hz) → BIIIIP grave
+#define DO_AGUDO    72  // C5 (523 Hz) → BIP medio
+
+typedef enum{
+ reposo,
+ alarma,
+ temporizador,
+
+}estados;
+estados estado = temporizador;
 
 // Defines lwIP/ESP32
 #define SYSTICKHZ               100
@@ -92,22 +104,73 @@ int siren_notes[] = {
     DO_CENTRAL,DO_CENTRAL,SOL,SOL,LA,LA,SOL,SOL,FA,FA,MI,MI,RE,RE,DO_CENTRAL
 };
 
-int siren_length = 8;
+int pasos_restantes=0;
+int nota_actual=0;
+int indice_nota = 0;
 
-int note_index = 0;
-int note_timer = 0;
+int temporizador_notas[] = {
+    LA_AGUDA,    // BIP (agudo rápido)
+    LA_AGUDA,    // BIP
+    LA_AGUDA,    // BIP
+    LA_BAJA,     // BIIIIP (grave largo)
+    0            // Silencio (fin)
+};
+int temporizador_duraciones[] = {
+    1,  // BIP 0.5s
+    1,  // BIP 0.5s
+    1,  // BIP 0.5s
+    4,  // BIIIIP 2s (largo para aviso)
+    2   // Silencio 1s
+};
+int temporizador_length = 5;  // Número de elementos
 
-void PlaySirenStep()
+void PlaySirenStep(void)
 {
-// if(note_index>=15)note_index=0;
-//int nota=siren_notes[note_index];
-//note_index++;
+    VolNota(50);
+    if (pasos_restantes == 0)
+    {
+        if (nota_actual == 0) {
+            TocaNota(1, 69); pasos_restantes = 1;  // UIIII 0.5s
+        }
+        else if (nota_actual == 1) {
+            TocaNota(1, 57); pasos_restantes = 4;  // UAAAA 2s
+        }
+        else {
+            // === FIN DE CICLO: RESET PARA REPETIR ===
+            TocaNota(0, 0);  // Silencio breve
+            nota_actual = 0; // ¡RESET!
+            pasos_restantes = 0;
+            // estado = reposo;  // Comenta si quieres repetir
+            return;
+        }
+        nota_actual++;
+    }
+    pasos_restantes--;
+}
+void TocaTemporizadorStep(void)
+{
 
-    VolNota(97);           // ¡MÁXIMO VOLUMEN!
-    TocaNota(CAMPANA, DO_AGUDO);     //
-    SysCtlDelay(g_ui32SysClock / 3);
-    //TocaNota(6, 21);
+    if (pasos_restantes == 0)
+    {
+        // === ¿FIN DE LA MELODÍA? ===
+        if (temporizador_notas[indice_nota] == 0)
+        {
+            TocaNota(SILENCIO, 0);  // Silencio final
+            indice_nota = 0;
+            pasos_restantes = 0;
 
+        }
+
+        // === TOCAR NUEVA NOTA ===
+        TocaNota(XILOFONO, temporizador_notas[indice_nota]);
+
+        // === DURACIÓN (en pasos de 500 ms) ===
+        pasos_restantes = temporizador_duraciones[indice_nota];
+        indice_nota++;
+    }
+
+    // === RESTAR UN PASO ===
+    pasos_restantes--;
 }
 
 // Funciones SLEEP/Timer0
@@ -376,13 +439,23 @@ int main(void)
 //    SysCtlDelay(g_ui32SysClock / 3);
     while(1) {
         SLEEP;
-        PlaySirenStep();
+
         ReadSensors();  // Vacío
         HandleButton();  // Envío directo
+        switch(estado){
+        case reposo:
+            break;
+        case alarma:
+            PlaySirenStep();
+            break;
+        case temporizador:
+            TocaTemporizadorStep();
+            break;
 
+        }
         // LED blink
         GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1,
-                     (GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^ GPIO_PIN_1));
+        (GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^ GPIO_PIN_1));
     }
 
     return 0;
