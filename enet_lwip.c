@@ -38,6 +38,25 @@
 volatile int Flag_ints = 0;
 volatile bool g_bPendingSend = false;
 
+// === INSTRUMENTOS ===
+#define PIANO       70
+#define SIRENA      1
+#define CAMPANA     73
+#define ALARMA      6
+#define XILOFONO    65
+#define TROMPETA    69
+
+// === NOTAS IMPORTANTES ===
+#define DO_CENTRAL  60
+#define RE          62
+#define MI          64
+#define FA          65
+#define SOL         67
+#define LA          69
+#define SI          71
+#define DO_AGUDO    72
+#define LA_BAJA     57
+#define LA_ALTA     81
 
 // Defines lwIP/ESP32
 #define SYSTICKHZ               100
@@ -70,10 +89,7 @@ char g_pcMessage[128] = "Hola DESDE TIVA";
 
 // === SIRENA DE BOMBEROS ESPAÑOLA ===
 int siren_notes[] = {
-    69, 57,  // UIIII (alto) → UAAAA (bajo)
-    69, 57,  // UIIII → UAAAA
-    69, 57,  // UIIII → UAAAA
-    69, 57   // UIIII → UAAAA
+    DO_CENTRAL,DO_CENTRAL,SOL,SOL,LA,LA,SOL,SOL,FA,FA,MI,MI,RE,RE,DO_CENTRAL
 };
 
 int siren_length = 8;
@@ -83,17 +99,14 @@ int note_timer = 0;
 
 void PlaySirenStep()
 {
-//    if(t1>=4){
-//   if(note_index==0)note_index=1;
-//   else note_index=0;
-//   t=0;
-//    }
-// int nota=siren_notes[note_index];
+// if(note_index>=15)note_index=0;
+//int nota=siren_notes[note_index];
+//note_index++;
 
-    VolNota(127);           // ¡MÁXIMO VOLUMEN!
-    TocaNota(6, 93);     //
+    VolNota(97);           // ¡MÁXIMO VOLUMEN!
+    TocaNota(CAMPANA, DO_AGUDO);     //
     SysCtlDelay(g_ui32SysClock / 3);
-    TocaNota(6, 21);
+    //TocaNota(6, 21);
 
 }
 
