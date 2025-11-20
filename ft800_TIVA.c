@@ -28,7 +28,7 @@
 #include <math.h>
 
 
-extern int RELOJ;
+extern int g_ui32SysClock;
 /*
  * ======== Standard MSP430 includes ========
  */
@@ -1195,7 +1195,7 @@ void Calibra_touch(void)
     EscribeRam32(CMD_CALIBRATE);
 
     Dibuja();
-    SysCtlDelay(RELOJ/6);
+    SysCtlDelay(g_ui32SysClock/6);
 
     //espera(500);
     ComEsperaFin();
@@ -1266,7 +1266,7 @@ void Fadeout(void)
         HAL_SPI_CSHigh();
 
 
-        SysCtlDelay(RELOJ/1500);
+        SysCtlDelay(g_ui32SysClock/1500);
 
 
     }
@@ -1282,7 +1282,7 @@ void Fadein()
         FT800_SPI_SendAddressWR(REG_PWM_DUTY);
         FT800_SPI_Write8(i);
         HAL_SPI_CSHigh();
-        SysCtlDelay(RELOJ/1500);
+        SysCtlDelay(g_ui32SysClock/1500);
     }
     i = 128;
     HAL_SPI_CSLow();

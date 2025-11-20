@@ -10,9 +10,10 @@ GEN_OPTS__FLAG :=
 GEN_CMDS__FLAG := 
 
 ORDERED_OBJS += \
+"./HAL_I2C.obj" \
 "./enet_fs.obj" \
-"./enet_lwip.obj" \
 "./ft800_TIVA.obj" \
+"./prueba2.obj" \
 "./startup_ccs.obj" \
 "./drivers/pinout.obj" \
 "./third_party/fatfs/port/mmc-ek-tm4c1294xl.obj" \
@@ -20,8 +21,10 @@ ORDERED_OBJS += \
 "./third_party/lwip-1.4.1/apps/httpserver_raw/httpd.obj" \
 "./utils/locator.obj" \
 "./utils/lwiplib.obj" \
+"./utils/softi2c.obj" \
 "./utils/uartstdio.obj" \
 "./utils/ustdlib.obj" \
+"C:/Users/danic/Downloads/SENSORLIB2.lib" \
 "../enet_lwip_ccs.cmd" \
 $(GEN_CMDS__FLAG) \
 -l"C:/ti/TivaWare_C_Series-2.2.0.295/driverlib/ccs/Debug/driverlib.lib" \
@@ -149,11 +152,11 @@ EXE_OUTPUTS__QUOTED += \
 
 
 # All Target
-all: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
+all: $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(GEN_CMDS)
 	@$(MAKE) --no-print-directory -Onone "proy_https3.out"
 
 # Tool invocations
-proy_https3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
+proy_https3.out: $(OBJS) $(CMD_SRCS) $(LIB_SRCS) $(GEN_CMDS)
 	@echo 'Building target: "$@"'
 	@echo 'Invoking: ARM Linker'
 	"C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 -me -O2 --define=ccs="ccs" --define=PART_TM4C1294NCPDT --define=TARGET_IS_TM4C129_RA2 --define=EK_TM4C129_BP1 -g --gcc --diag_warning=225 --diag_wrap=off --display_error_number --gen_func_subsections=on --abi=eabi --ual -z -m"enet_lwip_ccs.map" --heap_size=0 --stack_size=2048 -i"C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/lib" -i"C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="proy_https3_linkInfo.xml" --rom_model -o "proy_https3.out" $(ORDERED_OBJS)
@@ -164,8 +167,8 @@ proy_https3.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 # Other Targets
 clean:
 	-$(RM) $(EXE_OUTPUTS__QUOTED)
-	-$(RM) "enet_fs.obj" "enet_lwip.obj" "ft800_TIVA.obj" "startup_ccs.obj" "drivers\pinout.obj" "third_party\fatfs\port\mmc-ek-tm4c1294xl.obj" "third_party\fatfs\src\ff.obj" "third_party\lwip-1.4.1\apps\httpserver_raw\httpd.obj" "utils\locator.obj" "utils\lwiplib.obj" "utils\uartstdio.obj" "utils\ustdlib.obj" 
-	-$(RM) "enet_fs.d" "enet_lwip.d" "ft800_TIVA.d" "startup_ccs.d" "drivers\pinout.d" "third_party\fatfs\port\mmc-ek-tm4c1294xl.d" "third_party\fatfs\src\ff.d" "third_party\lwip-1.4.1\apps\httpserver_raw\httpd.d" "utils\locator.d" "utils\lwiplib.d" "utils\uartstdio.d" "utils\ustdlib.d" 
+	-$(RM) "HAL_I2C.obj" "enet_fs.obj" "ft800_TIVA.obj" "prueba2.obj" "startup_ccs.obj" "drivers\pinout.obj" "third_party\fatfs\port\mmc-ek-tm4c1294xl.obj" "third_party\fatfs\src\ff.obj" "third_party\lwip-1.4.1\apps\httpserver_raw\httpd.obj" "utils\locator.obj" "utils\lwiplib.obj" "utils\softi2c.obj" "utils\uartstdio.obj" "utils\ustdlib.obj" 
+	-$(RM) "HAL_I2C.d" "enet_fs.d" "ft800_TIVA.d" "prueba2.d" "startup_ccs.d" "drivers\pinout.d" "third_party\fatfs\port\mmc-ek-tm4c1294xl.d" "third_party\fatfs\src\ff.d" "third_party\lwip-1.4.1\apps\httpserver_raw\httpd.d" "utils\locator.d" "utils\lwiplib.d" "utils\softi2c.d" "utils\uartstdio.d" "utils\ustdlib.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

@@ -8,36 +8,42 @@ SHELL = cmd.exe
 C_SRCS += \
 C:/ti/TivaWare_C_Series-2.2.0.295/utils/locator.c \
 C:/ti/TivaWare_C_Series-2.2.0.295/utils/lwiplib.c \
+../utils/softi2c.c \
 C:/ti/TivaWare_C_Series-2.2.0.295/utils/uartstdio.c \
 C:/ti/TivaWare_C_Series-2.2.0.295/utils/ustdlib.c 
 
 C_DEPS += \
 ./utils/locator.d \
 ./utils/lwiplib.d \
+./utils/softi2c.d \
 ./utils/uartstdio.d \
 ./utils/ustdlib.d 
 
 OBJS += \
 ./utils/locator.obj \
 ./utils/lwiplib.obj \
+./utils/softi2c.obj \
 ./utils/uartstdio.obj \
 ./utils/ustdlib.obj 
 
 OBJS__QUOTED += \
 "utils\locator.obj" \
 "utils\lwiplib.obj" \
+"utils\softi2c.obj" \
 "utils\uartstdio.obj" \
 "utils\ustdlib.obj" 
 
 C_DEPS__QUOTED += \
 "utils\locator.d" \
 "utils\lwiplib.d" \
+"utils\softi2c.d" \
 "utils\uartstdio.d" \
 "utils\ustdlib.d" 
 
 C_SRCS__QUOTED += \
 "C:/ti/TivaWare_C_Series-2.2.0.295/utils/locator.c" \
 "C:/ti/TivaWare_C_Series-2.2.0.295/utils/lwiplib.c" \
+"../utils/softi2c.c" \
 "C:/ti/TivaWare_C_Series-2.2.0.295/utils/uartstdio.c" \
 "C:/ti/TivaWare_C_Series-2.2.0.295/utils/ustdlib.c" 
 

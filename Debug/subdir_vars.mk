@@ -8,40 +8,49 @@ SHELL = cmd.exe
 CMD_SRCS += \
 ../enet_lwip_ccs.cmd 
 
+LIB_SRCS += \
+C:/Users/danic/Downloads/SENSORLIB2.lib 
+
 C_SRCS += \
+../HAL_I2C.c \
 ../enet_fs.c \
-../enet_lwip.c \
 ../ft800_TIVA.c \
+../prueba2.c \
 ../startup_ccs.c 
 
 C_DEPS += \
+./HAL_I2C.d \
 ./enet_fs.d \
-./enet_lwip.d \
 ./ft800_TIVA.d \
+./prueba2.d \
 ./startup_ccs.d 
 
 OBJS += \
+./HAL_I2C.obj \
 ./enet_fs.obj \
-./enet_lwip.obj \
 ./ft800_TIVA.obj \
+./prueba2.obj \
 ./startup_ccs.obj 
 
 OBJS__QUOTED += \
+"HAL_I2C.obj" \
 "enet_fs.obj" \
-"enet_lwip.obj" \
 "ft800_TIVA.obj" \
+"prueba2.obj" \
 "startup_ccs.obj" 
 
 C_DEPS__QUOTED += \
+"HAL_I2C.d" \
 "enet_fs.d" \
-"enet_lwip.d" \
 "ft800_TIVA.d" \
+"prueba2.d" \
 "startup_ccs.d" 
 
 C_SRCS__QUOTED += \
+"../HAL_I2C.c" \
 "../enet_fs.c" \
-"../enet_lwip.c" \
 "../ft800_TIVA.c" \
+"../prueba2.c" \
 "../startup_ccs.c" 
 
 

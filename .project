@@ -26,6 +26,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>SENSORLIB2.lib</name>
+			<type>1</type>
+			<locationURI>PARENT-2-COM_TI_TIVAWARE_INSTALL_DIR/Users/danic/Downloads/SENSORLIB2.lib</locationURI>
+		</link>
+		<link>
 			<name>drivers/pinout.c</name>
 			<type>1</type>
 			<locationURI>SW_ROOT1/examples/boards/ek-tm4c1294xl/drivers/pinout.c</locationURI>

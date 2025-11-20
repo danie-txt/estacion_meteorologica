@@ -15,3 +15,5 @@ encoding//Debug/third_party/lwip-1.4.1/apps/httpserver_raw/subdir_vars.mk=UTF-8
 encoding//Debug/utils/subdir_rules.mk=UTF-8
 encoding//Debug/utils/subdir_vars.mk=UTF-8
 encoding/enet_lwip.c=UTF-8
+encoding/prueba1.c=UTF-8
+encoding/prueba2.c=UTF-8

@@ -95,6 +95,9 @@
 							<tool id="com.ti.ccstudio.buildDefinitions.TMS470_18.12.hex.1547955788" name="ARM Hex Utility" superClass="com.ti.ccstudio.buildDefinitions.TMS470_18.12.hex"/>
 						</toolChain>
 					</folderInfo>
+					<sourceEntries>
+						<entry excluding="prueba1.c|enet_lwip.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
 				</configuration>
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
@@ -201,4 +204,5 @@
 		<project id="enet_lwip.com.ti.ccstudio.buildDefinitions.TMS470.ProjectType.344978499" name="TMS470" projectType="com.ti.ccstudio.buildDefinitions.TMS470.ProjectType"/>
 	</storageModule>
 	<storageModule moduleId="scannerConfiguration"/>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 </cproject>
