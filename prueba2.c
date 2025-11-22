@@ -1,18 +1,8 @@
 //*****************************************************************************
 //
-// enet_lwip_esp32_fire_forget.c - Raw lwIP to ESP32: ENVIA Y YA (sin espera).
+// PROYECTO MONITORIZACION AMBIENTAL EN ENTORNO CERRADOS
 //
-// Fixes:
-// - ENVIA sin esperar g_bConnected (connect async).
-// - QUITADO "Connection: close" + cierre manual solo si OK.
-// - IGNORA ESPError/Recv (no cierra PCB en abort).
-// - SIN lwIPHostTimerHandler() (IP estÃ¡tica).
-// - Mensaje fijo, sin sensores.
-// - Fix encoding: Strings sin acentos.
-//
-// Copyright (c) 2013-2020 Texas Instruments Incorporated.  All rights reserved.
-//
-//*****************************************************************************
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -29,6 +19,7 @@
 #include "lwip/tcp.h"
 #include "lwip/ip_addr.h"
 #include "lwip/err.h"
+#include <math.h>
 
 #include "HAL_I2C.h"
 #include "sensorlib2.h"
@@ -36,11 +27,13 @@
 
 #define B1_OFF GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0)
 #define B1_ON !(GPIOPinRead(GPIO_PORTJ_BASE,GPIO_PIN_0))
+#define min_espera 1
 
 //Sensor ENS160
 #define ENS160_ADDR  0x52   // ADD=GND
 uint16_t ens_TVOC = 0;
 uint16_t ens_ECO2 = 0;
+uint16_t ens_AQI = 0;
 bool Ens_OK = false;
 //SENSOR BOOSTERPACK
 uint8_t Opt_OK, Tmp_OK, Bme_OK, Bmi_OK;
@@ -52,6 +45,7 @@ int DevID=0;
 int16_t T_amb, T_obj;
 float Tf_obj, Tf_amb;
 int lux_i, T_amb_i, T_obj_i;
+
 // BME280
 int returnRslt;
 int g_s32ActualTemp   = 0;
@@ -82,18 +76,9 @@ volatile bool g_bPendingSend = false;
 #define SI          71
 #define DO_AGUDO    72
 
-// === NOTAS (agudas para bip) ===
-#define LA_AGUDA    81  // A5 (880 Hz) â†’ BIP agudo
-#define LA_BAJA     57  // A3 (220 Hz) â†’ BIIIIP grave
-
-
-typedef enum{
- reposo,
- alarma,
- temporizador,
-
-}estados;
-estados estado = reposo;
+// === NOTAS
+#define LA_AGUDA    81  //  BIP agudo
+#define LA_BAJA     57  // BIIIIP grave
 
 // Defines lwIP/ESP32
 #define SYSTICKHZ               100
@@ -108,9 +93,8 @@ const int32_t REG_CAL[6]= {CAL_DEFAULTS};
 uint32_t g_ui32IPAddress;
 uint32_t g_ui32SysClock;
 volatile bool g_bLED;
-uint8_t estadoboton = 0;
 int i=0;
-int t1=0;
+
 
 struct tcp_pcb *g_pcb = NULL;
 uint8_t g_bConnected = 0;  // Opcional ahora (no esperamos)
@@ -124,17 +108,12 @@ char g_pcMessage[128] = "Hola DESDE TIVA";
 #define ESP_IP_D 50
 #define ESP_PORT 80
 
-// === SIRENA DE BOMBEROS ESPAÃ‘OLA ===
-int siren_notes[] = {
-    DO_CENTRAL,DO_CENTRAL,SOL,SOL,LA,LA,SOL,SOL,FA,FA,MI,MI,RE,RE,DO_CENTRAL
-};
-
 int pasos_restantes=0;
 int nota_actual=0;
 int indice_nota = 0;
 
 int temporizador_notas[] = {
-    LA_AGUDA,    // BIP (agudo rÃ¡pido)
+    LA_AGUDA,    // BIP
     LA_AGUDA,    // BIP
     LA_AGUDA,    // BIP
     LA_BAJA,     // BIIIIP (grave largo)
@@ -147,25 +126,117 @@ int temporizador_duraciones[] = {
     4,  // BIIIIP 2s (largo para aviso)
     2   // Silencio 1s
 };
-int temporizador_length = 5;  // NÃºmero de elementos
+int temporizador_length = 5;  // NUmero de elementos
+
+//Mensajes de alarma
+char t_tempa[20] = "HIGH TEMPERATURE";
+char t_tempb[20] = "LOW TEMPERATURE";
+char t_presa[20] = "HIGH PRESSURE";
+char t_presb[20] = "LOW PRESSURE";
+char t_humeda[20] = "HIGH HUMIDITY";
+char t_humedb[20] = "LOW HUMIDITY";
+char t_co2a[40] = "CO2 ABOVE LIMITS";
+char calidad[30]="";
+char t_timer[30]="";
+
+
+char settings;
+char ok;
+char set[5];
+char back;
+
+#define H1  20
+#define anchoset 200
+#define Hgrad 180
+#define XT  HSIZE*1/5-50
+#define XP  HSIZE*2/5-50
+#define XH  HSIZE*3/5-30
+#define XC  HSIZE*4/5
+int numero;
+
+int alarma=0;
+int timer=0;
+//Chars para mostrar en pantalla
+char luz[30]="";
+char temp[30]="";
+char hum[30]="";
+char pres[30]="";
+char bares_char[30]="";
+char numero_char[30]="";
+char t_tvoc[30]="";
+char t_co2[30]="";
+char t_aqui[30]="";
+
+//ESTADOS
+typedef enum {
+    p_ppal, //PRINCIPAL
+    p_set,  //SETTINGS
+    p_pad1, //PARA DEFINIR VALOR MINIMO DE MEDIDAS
+    p_pad2, //PARA DEFINIR VALOR MAXIMO DE MEDIDAS
+    p_pad_prev,
+    p_descont, //PARA QUE NO SE ENVIE MENSAJE POR TELEGRAM CONSTATEMENTE
+    p_alarma, //AVISO DE ALARMA PORQUE SE HA SALIDO DEL RANGO ESTABLECIDO DE ALGUNA VARIABLE
+    p_sendpost, //ENVIA POST REQUEST A ESP32
+    p_temporizador  //SUENA AVISO DE FIN DE TEMPORIZADOR
+}Estado;
+Estado estado;
+Estado estado_ant;
+
+int Ttim, Tmax, Pmax, Hmax, Tmin, Pmin, Hmin;
+
+int T_uncomp,T_comp;
+char mode;
+long int inicio, tiempo;
+int t1=0;
+int time_wait=0;
+int ts=0;
+
+int i_var;//indice para recorrer los vectores de variables
+int aqi=1;
+int Ttim, Tmax, Pmax, Hmax, Tmin, Pmin, Hmin,Co2min,Co2max;
+int* valores_min[]={&Tmin,&Pmin,&Hmin,&Co2min,&Ttim};
+int* valores_max[]={&Tmax,&Pmax,&Hmax,&Co2max};
+char* textos_min[]={"floor limit:\n %d C \n","floor limit:\n %d mbar \n","floor limit:\n %d %% \n",
+                    "floor limit:\n %d ppm \n","set timer:\n %d min \n"};
+char* textos_max[]={"ceiling limit:\n %d C \n","ceiling limit:\n %d mbar \n","ceiling limit:\n %d %% \n",
+                    "ceiling limit:\n %d ppm \n",};
+
+bool b_alarma;
+bool b_wifi;
+
+void ShowStateIP(void)
+{
+    uint32_t link_up = EMACPHYRead(EMAC0_BASE, 0, EPHY_BMSR) & EPHY_BMSR_LINKSTAT;
+
+    if (link_up)
+    {
+        // HAY CABLE ENCHUFADO → CONECTADO (aunque la IP sea estática)
+        ComColor(0,255,0);
+        ComTXT(HSIZE-anchoset/3, VSIZE*3/5, 26, OPT_CENTERX, "CONNECTED");
+
+    }
+    else
+    {
+        // NO CONECTADO
+        ComColor(255,0,0);
+        ComTXT(HSIZE-anchoset/3, VSIZE*3/5, 26, OPT_CENTERX, "NOT CONNECTED");
+    }
+}
 
 bool ENS160_Init(void)
 {
     uint8_t part_id[2];
 
     // 1. Leer PART_ID
-    // CORRECCIÃ“N 1: Usamos '!' porque readI2C devuelve true si va bien.
-    // Si devuelve false (o 0), entonces entramos al error.
     if (!readI2C(ENS160_ADDR, 0x00, part_id, 2))
     {
         UARTprintf("Error de comunicacion I2C al leer ID\n");
         return false;
     }
 
-    // DEBUG: Ver quÃ© estamos leyendo realmente
+
     UARTprintf("\nDEBUG ENS160 ID: [0]=0x%x, [1]=0x%x \n", part_id[0], part_id[1]);
 
-    // CORRECCIÃ“N 2: El ENS160 es Little Endian (LSB primero).
     // Debe ser: part_id[0] == 0x60 y part_id[1] == 0x01
     if (part_id[0] != 0x60 || part_id[1] != 0x01)
     {
@@ -191,38 +262,40 @@ void ENS160_Read(void)
 {
     uint8_t status;
     uint8_t data[8];
+    uint8_t aqi;
     readI2C(ENS160_ADDR, 0x20, &status, 1);
     readI2C(ENS160_ADDR, 0x22, data, 8);
     uint8_t validity = (status >> 2) & 0x03;
-//    if (validity == 0 || validity == 1)
-//    {
+    readI2C(ENS160_ADDR, 0x21, &aqi, 1);
+
         ens_TVOC = data[0] | (data[1] << 8);   // <--- Â¡SWAP AQUÃ�! MSB primero
         ens_ECO2 =  data[2] | (data[3] << 8);   // <--- Â¡SWAP AQUÃ�! MSB primero
-//    }
-//    else
-//    {
-//        ens_TVOC = 0;
-//        ens_ECO2 = 0;
-//    }
-    UARTprintf("Status Flag: %d (0=OK, 1=Warm, 2=Init)\n", validity);
+        ens_AQI = aqi;
+
+
+        sprintf(t_tvoc, "%d",ens_TVOC);
+        sprintf(t_co2, "%d ppm",ens_ECO2);
+        sprintf(t_aqui, "%d",ens_AQI);
+        UARTprintf("Validity: %d | AQI: %d (1=Excellent ... 5=Unhealthy) | TVOC: %d ppb | eCO2: %d ppm\n",
+                      validity, ens_AQI, ens_TVOC, ens_ECO2);
 }
 void PlaySirenStep(void)
 {
-    VolNota(50);
+    VolNota(127);
     if (pasos_restantes == 0)
     {
         if (nota_actual == 0) {
-            TocaNota(1, 69); pasos_restantes = 1;  // UIIII 0.5s
+            TocaNota(1, 69); pasos_restantes = 1;
         }
         else if (nota_actual == 1) {
-            TocaNota(1, 57); pasos_restantes = 4;  // UAAAA 2s
+            TocaNota(1, 57); pasos_restantes = 4;
         }
         else {
             // === FIN DE CICLO: RESET PARA REPETIR ===
             TocaNota(0, 0);  // Silencio breve
-            nota_actual = 0; // Â¡RESET!
+            nota_actual = 0;
             pasos_restantes = 0;
-            // estado = reposo;  // Comenta si quieres repetir
+
             return;
         }
         nota_actual++;
@@ -266,20 +339,33 @@ void Timer0IntHandler(void)
 {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
     Flag_ints = 1;
-    t1++;
+    if(estado == p_descont || timer==1 ){
+        t1++;
+        if(t1>=4){
+            ts++; // segundos
+            t1=0;
+        }
+        if(ts>=60){
+            ts=0;
+            time_wait++; //minutos
+        }
+    }else {
+        t1=0;
+        ts=0;
+        time_wait=0;
+    }
 
 }
 void lwIPHostTimerHandler(void)
 {
-    // VersiÃ³n minimalista: Solo chequea IP si cambiÃ³ (raro con estÃ¡tica).
-    // Si quieres silencio total, deja vacÃ­o {}.
+
     uint32_t ui32NewIPAddress = lwIPLocalIPAddrGet();
     if(ui32NewIPAddress != g_ui32IPAddress) {
         g_ui32IPAddress = ui32NewIPAddress;  // Actualiza global (sin prints)
-        // Opcional: UARTprintf("IP changed to: "); DisplayIPAddress(ui32NewIPAddress); UARTprintf("\n");
+
     }
 }
-// Sensores (vacÃ­o)
+// Sensores
 void ReadSensors(void)
 {
 
@@ -313,6 +399,9 @@ void ReadSensors(void)
     if(Bme_OK)
     {
         UARTprintf("-----------------------------------------\n");
+        sprintf(temp, "%.2f C \n",T_act);
+        sprintf(pres, "%.2f mbar \n",P_act);
+        sprintf(hum, "%.2f %% \n",H_act);
         sprintf(string, "  BME: T:%.2f C  P:%.2fmbar  H:%.3f  \n",T_act,P_act,H_act);
         UARTprintf(string);
     }
@@ -350,11 +439,11 @@ err_t ESPConnected(void *arg, struct tcp_pcb *tpcb, err_t err)
         g_bConnected = 1;
         UARTprintf("Conectado a ESP32.\n");
 
-        // Si el botÃ³n habÃ­a pedido envÃ­o, hazlo ahora
+
         if (g_bPendingSend) {
             g_bPendingSend = false;  // limpiar bandera
             g_pcb = tpcb;            // asegurar PCB activo
-            ESPSendPost();           // lanzar envÃ­o real
+            ESPSendPost();           // lanzar envIO
         }
     } else {
         UARTprintf("Connect failed: %d\n", err);
@@ -363,7 +452,7 @@ err_t ESPConnected(void *arg, struct tcp_pcb *tpcb, err_t err)
 }
 
 
-// Ignorar recv completamente (no esperamos response)
+
 err_t ESPRecv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
     if (p != NULL) {
@@ -378,7 +467,6 @@ err_t ESPSent(void *arg, struct tcp_pcb *tpcb, u16_t len)
     return ERR_OK;
 }
 
-// IGNORAR errores: No cierra PCB (fire-and-forget)
 void ESPError(void *arg, err_t err)
 {
     // Silencio: No log, no close. Deja que lwIP maneje.
@@ -387,12 +475,12 @@ void ESPSendPost(void)
 {
     if (!g_pcb) {
         UARTprintf("No PCB, conectando y dejando envio pendiente...\n");
-        g_bPendingSend = true;  // <-- marcar que hay envÃ­o pendiente
-        ESPInit();              // inicia conexiÃ³n
+        g_bPendingSend = true;  // <-- marcar que hay envio pendiente
+        ESPInit();              // inicia conexion
         return;
     }
 
-    // Si ya hay conexiÃ³n activa, enviar directamente
+    // Si ya hay conexion activa, enviar directo
     int len = usprintf(g_pcPostData,
         "POST /send HTTP/1.1\r\n"
         "Host: %d.%d.%d.%d\r\n"
@@ -401,7 +489,7 @@ void ESPSendPost(void)
         "\r\n"
         "text=%s",
         ESP_IP_A, ESP_IP_B, ESP_IP_C, ESP_IP_D,
-        (int)strlen(g_pcMessage),
+        (int)strlen(g_pcMessage), //se envia mensaje segun alerta
         g_pcMessage);
 
     UARTprintf("Enviando POST (%d bytes): %s\n", len, g_pcMessage);
@@ -437,36 +525,9 @@ void ESPInit(void)
     }
 }
 
-void HandleButton(void)
-{
 
 
-    switch(estadoboton) {
-        case 0:
-            if(B1_ON) {
-                UARTprintf("Button pressed.\n");
-                estadoboton = 1;
-                SysCtlDelay(2400000);  // Debounce
-            }
-            break;
 
-        case 1:
-            if(B1_OFF) {
-                UARTprintf("Button released - enviando!\n");
-                if(g_ui32IPAddress != 0) {
-                    ESPSendPost();  // EnvÃ­a directo (sin check connected)
-                } else {
-                    UARTprintf("No IP.\n");
-                }
-                estadoboton = 0;
-            }
-            break;
-
-
-    }
-}
-
-// Main simplificado
 int main(void)
 {
     uint32_t ui32User0, ui32User1;
@@ -479,24 +540,21 @@ int main(void)
 
 
 
-        // 2. Habilitar perifÃ©ricos de la placa base (LEDs, UART, Ethernet)
+        // 2. Habilitar perifericos de la placa base (LEDs, UART, Ethernet)
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
         SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
         SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
 
-        // IMPORTANTE: AsegÃºrate de habilitar el puerto del I2C (Port B para BP1) aquÃ­ tambiÃ©n por seguridad
+
 
 
         // 3. Configurar Pines de la placa base (Ethernet y UART)
-        // MOVIDO: PinoutSet debe ir ANTES de configurar tus sensores
-        //PinoutSet(true, false);
-       // SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
         GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0 |GPIO_PIN_4);
         GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0 |GPIO_PIN_1);
 
-        // ConfiguraciÃ³n UART
+        // Configuracion UART
         UARTStdioConfig(0, 115200, g_ui32SysClock);
         UARTprintf("\033[2J\033[H");
         UARTprintf("Tiva to ESP32... \n");
@@ -536,7 +594,7 @@ int main(void)
         // Timer0 SLEEP (500ms)
           SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
           TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-          TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 2 - 1);
+          TimerLoadSet(TIMER0_BASE, TIMER_A, g_ui32SysClock / 4 - 1);
           TimerIntRegister(TIMER0_BASE, TIMER_A, Timer0IntHandler);
           IntEnable(INT_TIMER0A);
           TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
@@ -558,7 +616,7 @@ int main(void)
           IntMasterEnable();
 
 
-          SysCtlDelay(g_ui32SysClock / 10); // PequeÃ±a pausa para estabilizar voltajes
+          SysCtlDelay(g_ui32SysClock / 10);
 
           UARTprintf("Configurando BoosterPack...\n");
          Conf_Boosterpack(1, g_ui32SysClock);    // Configura I2C0 en PB2/PB3
@@ -628,28 +686,333 @@ int main(void)
         }
     }
 
-
+    //Limites
+    Tmax=35;
+    Tmin=20;
+    Pmax=1030;
+    Pmin=1000;
+    Co2min=600;
+    Co2max=1500;
+    Hmax=60;
+    Hmin=40;
+    Ttim=10;
 
 
     while(1) {
         SLEEP;
-
-        ReadSensors();  // VacÃ­o
-        HandleButton();  // EnvÃ­o directo
+        Nueva_pantalla(16,16,16);
+        ComColor(160, 160, 160);
+        ComRect(12, 12, HSIZE-12, VSIZE-12, true);
+        ComColor(0,0,0);
+        ReadSensors();
         switch(estado){
-        case reposo:
+
+        case p_ppal:
+
+            //TEMPERATURA
+            if(T_act<Tmin){
+                ComColor(0,0,255);
+                ComBgcolor(0,0,255);
+                alarma = 1;
+                strcpy(g_pcMessage,t_tempb);
+
+            }else if(T_act>Tmax){
+                ComColor(255,0,0);
+                ComBgcolor(255,0,0);
+                alarma = 1;
+                strcpy(g_pcMessage,t_tempa);
+            }else{
+                ComColor(0,0,0);
+                ComBgcolor(0,0,0);
+            };
+
+            ComCirculo(XT+4,H1+110,10);
+            ComColor(240,240,240);
+            ComTXT(XT+10,H1+140, 22, OPT_CENTERX,temp);
+            ComColor(255,255,255);
+
+            ComProgbar(XT, H1, 8, 100, 0, 50-(int)T_act, 40,50);
+
+            ComColor(255,255,255);
+            ComTXT(XT,H1+120, 22, OPT_CENTERX,"T:");
+
+            //PRESION
+            if(P_act<Pmin) {
+                ComBgcolor(0,0,255);
+                strcpy(g_pcMessage,t_presb);
+                alarma = 1;
+            }
+            else if(P_act>Pmax) {
+                ComBgcolor(255,0,0);
+                strcpy(g_pcMessage,t_presa);
+                alarma = 1;
+            }
+            else ComBgcolor(240,240,240);
+            ComTXT(XP+10,H1+130, 22, OPT_CENTERX,pres);
+            ComColor(0,0,0);
+            int P_act_desp=P_act-950;
+            ComGauge(XP, H1+50, 50, OPT_FLAT, 5, 4, (int)P_act_desp, 100);
+            ComColor(255,255,255);
+            ComTXT(XP,H1+110, 22, OPT_CENTERX,"P:");
+
+            //HUMEDAD
+            if(H_act<Hmin){
+                ComBgcolor(0,0,255);
+                 strcpy(g_pcMessage,t_humedb);
+                alarma = 1;
+            }
+            else if(H_act>Hmax){
+                ComBgcolor(255,0,0);
+                strcpy(g_pcMessage,t_humeda);
+                alarma=1;
+            }
+            else ComBgcolor(240,240,240);
+            ComTXT(XH+10,H1+130, 22, OPT_CENTERX,hum);
+            ComColor(0,0,0);
+            ComGauge(XH, H1+50, 50, OPT_FLAT, 5, 4, (int)H_act, 100);
+            ComColor(255,255,255);
+            ComTXT(XH,H1+110, 22, OPT_CENTERX,"H:");
+
+          //  c02
+            if(ens_ECO2<Co2min) {
+                ComBgcolor(0,0,255);
+
+            }
+            else if(ens_ECO2>Co2max){
+                ComBgcolor(255,0,0);
+                strcpy(g_pcMessage,t_co2a);
+                alarma=1;
+            }
+            else ComBgcolor(255,255,0);
+            ComTXT(XC+10,H1+130, 22, OPT_CENTERX,t_co2);
+            ComColor(0,0,0);
+            int Co2_desp=ens_ECO2-400;
+            ComGauge(XC, H1+50, 50, OPT_FLAT, 5, 4, (int)Co2_desp, 1600);
+            ComColor(255,255,255);
+            ComTXT(XC,H1+110, 22, OPT_CENTERX,"CO2:");
+
+            //CALIDAD DEL AIRE
+            ComTXT(XP,VSIZE-30, 22, OPT_CENTERX,"AIR QUALITY:");
+            switch (ens_AQI){
+            case 1:
+                ComColor(134, 216, 218);
+                strcpy(calidad, "EXCELLENT");
+                ComTXT(XH,VSIZE-30, 22, OPT_CENTERX,calidad);
+                break;
+            case 2:
+                ComColor(189, 220, 81);
+                strcpy(calidad, "GOOD");
+                ComTXT(XH,VSIZE-30, 22, OPT_CENTERX,calidad);
+                break;
+            case 3:
+                ComColor(242, 192, 5);
+                strcpy(calidad, "MODERATE");
+                ComTXT(XH,VSIZE-30, 22, OPT_CENTERX,calidad);
+                break;
+            case 4:
+                ComColor(249, 159,8);
+                strcpy(calidad, "POOR");
+                ComTXT(XH,VSIZE-30, 22, OPT_CENTERX,calidad);
+                break;
+            case 5:
+                ComColor(241, 77, 77);
+                strcpy(calidad, "UNHEALTHY");
+                ComTXT(XH,VSIZE-30, 22, OPT_CENTERX,calidad);
+                break;
+            }
+
+
+            ComFgcolor(200,50,50);
+            ComColor(250,250,250);
+            settings=Boton(HSIZE-100,  VSIZE-60,  80,  40,  26, "SETTINGS");
+            //timer
+           if(timer){
+
+                ComColor(0,0,127);
+                ComTXT(HSIZE-90,VSIZE-90, 22, OPT_CENTERX,"TIMER: ");
+                ComColor(0,0,0);
+                sprintf(t_timer,"%d",time_wait);
+                ComTXT(HSIZE-40,VSIZE-90, 22, OPT_CENTERX,t_timer);
+
+           }
+
+
+            if(alarma && b_alarma) estado=p_alarma;
+            else if(alarma && b_wifi)estado=p_sendpost;
+            else if(timer && time_wait>=Ttim)estado=p_temporizador;
+            else if(settings) estado=p_set;
+            else estado=p_ppal;
             break;
-        case alarma:
+
+        case p_set:
+            ShowStateIP(); //Muestra si el ethernet esta enchufado o no
+            set[0] = 0;
+            set[1] = 0;
+            set[2] = 0;
+            set[3] = 0;
+            set[4] = 0;
+            ComFgcolor(255,0,0);
+            ComColor(0,0,0);
+            set[0]=Boton(HSIZE/2- anchoset/2,VSIZE*2/7,  anchoset,  30,  26, "SET TEMPERATURE");
+            set[1]=Boton(HSIZE/2- anchoset/2,VSIZE*3/7, anchoset,  30,  26, "SET PRESSURE");
+            set[2]=Boton(HSIZE/2- anchoset/2,VSIZE*4/7,  anchoset,  30,  26, "SET HUMIDITY");
+            set[3]=Boton(HSIZE/2- anchoset/2,VSIZE*5/7,  anchoset,  30,  26, "SET CO2");
+            set[4]=Boton(HSIZE/2- anchoset/2,VSIZE/7,  anchoset,  30,  26, "SET TIMER");
+            back=Boton(HSIZE/2- anchoset/4,  VSIZE*6/7,  anchoset/2,  30,  26, "BACK");
+
+            if (b_alarma)  ComFgcolor(0,255,0);      // verde si está ON
+            else           ComFgcolor(250,0,0);  // gris si está OFF
+
+            if (Boton(25, VSIZE*3/7, anchoset/2, 30, 26, "ALARM"))
+            {
+                if (b_alarma) {
+                    // Si ya estaba ON → lo apagamos (permitimos desactivar)
+                    b_alarma = false;
+                }
+                else {
+                    // Solo se permite activar si WIFI está apagado
+                    if (!b_wifi) {
+                        b_alarma = true;
+                    }
+                }
+            }
+
+            // ====== BOTÓN WIFI ======
+            if (b_wifi)  ComFgcolor(0,255,0);
+            else         ComFgcolor(250,0,0);
+
+            if (Boton(HSIZE-25-anchoset/2, VSIZE*3/7, anchoset/2, 30, 26, "WIFI"))
+            {
+                if (b_wifi) {
+                    // Si ya estaba ON → lo apagamos
+                    b_wifi = false;
+                }
+                else {
+                    // Solo se permite activar si ALARMA está apagado
+                    if (!b_alarma) {
+                        b_wifi = true;
+                        timer = 0; //no hay timer si alerta por wifi se activa
+                    }
+                }
+            }
+
+            if(alarma && b_alarma) estado=p_alarma;
+            else if(alarma && b_wifi)estado=p_sendpost;
+            else if(timer && time_wait>=Ttim)estado=p_temporizador;
+            else if(back) estado=p_ppal;
+            else if(set[0]||set[1]||set[2]||set[3]||set[4]) estado=p_pad1;
+            else estado=p_set;
+            break;
+
+        case p_pad1:
+            ComFgcolor(250,0,0);
+            ComColor(255,255,255);
+            int** valores=valores_min;
+            char** textos=textos_min;
+            for(i=0;i<5;i++) if(set[i]){i_var=i;break;}
+            if(i_var<0)i_var=0;
+            numero=*valores[i_var];
+            sprintf(numero_char,textos[i_var],numero);
+            ComTXT(HSIZE/2,VSIZE/2,22,OPT_CENTERX,numero_char);
+         if(i_var<3 ){
+            if(Boton(HSIZE*3/4-50,VSIZE/2-35,70,70,31,"+")) numero++,*valores[i_var]=numero;
+            if(Boton(HSIZE*1/4-50,VSIZE/2-35,70,71,31,"-")) numero--,*valores[i_var]=numero;
+         }else if(i_var==3){
+             if(Boton(HSIZE*3/4-50,VSIZE/2-35,70,70,31,"+")) numero+=50,*valores[i_var]=numero;
+             if(Boton(HSIZE*1/4-50,VSIZE/2-35,70,71,31,"-")) numero-=50,*valores[i_var]=numero;
+         }else{
+             if(Boton(HSIZE*3/4-50,VSIZE/2-35,70,70,31,"+")) numero+=5,*valores[i_var]=numero;
+             if(Boton(HSIZE*1/4-50,VSIZE/2-35,70,71,31,"-")) numero-=5,*valores[i_var]=numero;
+             timer=1;
+             time_wait=0;
+             ts = 0;
+             t1 = 0;
+         }
+
+            if(Boton(HSIZE/2-20,VSIZE-60,50,50,26,"OK")){
+                *valores[i_var]=numero;
+                if(i_var==4) estado=p_set;
+                else estado=p_pad2;
+            }
+            break;
+
+        case p_pad2:
+            ComFgcolor(250,0,0);
+            ComColor(255,255,255);
+
+            valores=valores_max;
+            textos=textos_max;
+            for(i=0;i<4;i++) if(set[i]){i_var=i;break;}
+            if(i_var<0)i_var=0;
+            numero=*valores[i_var];
+            sprintf(numero_char,textos[i_var],numero);
+            ComTXT(HSIZE/2-10,VSIZE/2,22,OPT_CENTERX,numero_char);
+            if(i_var<3){
+                if(Boton(HSIZE*3/4-50,VSIZE/2-35,70,70,31,"+")) numero++,*valores[i_var]=numero;
+                if(Boton(HSIZE*1/4-50,VSIZE/2-35,70,71,31,"-")) numero--,*valores[i_var]=numero;
+            }else{
+                if(Boton(HSIZE*3/4-50,VSIZE/2-35,70,70,31,"+")) numero+=50,*valores[i_var]=numero;
+                if(Boton(HSIZE*1/4-50,VSIZE/2-35,70,71,31,"-")) numero-=50,*valores[i_var]=numero;
+            }
+
+            if(Boton(HSIZE/2-20,VSIZE-60,50,50,26,"OK")) *valores[i_var]=numero,estado=p_set;
+            if(alarma && b_alarma) estado=p_alarma;
+            break;
+
+
+        case p_alarma:
             PlaySirenStep();
+            ok=Boton(HSIZE-100,  VSIZE-60,  80,  40,  26, "DONE");
+            ComColor(0,0,0);
+            ComTXT(HSIZE/2-10,VSIZE/2,31,OPT_CENTERX,"ALARM ACTIVE");
+            if(ok) {
+                estado=p_ppal;
+                ok=0;
+                alarma=0;
+                b_alarma=false;
+                TocaNota(SILENCIO, 0);
+
+
+            }
+            else estado=p_alarma;
             break;
-        case temporizador:
+        case p_sendpost:
+            ESPSendPost();
+            estado = p_descont;
+            break;
+
+        case p_descont:
+            UARTprintf("\nEsperando tiempo para volver a enviar mensaje\n");
+            ComColor(0,0,0);
+            ComTXT(HSIZE/2-10,VSIZE/2,31,OPT_CENTERX,"MESSAGE SEND");
+            ok=Boton(HSIZE-100,  VSIZE-60,  80,  40,  26, "DONE");
+            if(time_wait>=min_espera){
+                estado = p_ppal;
+                alarma = 0;
+            }
+            if(ok){
+                estado = p_ppal;
+                b_wifi = false;
+                alarma = 0;
+            }
+            break;
+        case p_temporizador:
             TocaTemporizadorStep();
+            ComColor(0,0,0);
+            ComTXT(HSIZE/2-10,VSIZE/2,31,OPT_CENTERX,"TIMER FINISHED");
+            ok=Boton(HSIZE-100,  VSIZE-60,  80,  40,  26, "DONE");
+            if(ok) {
+                estado=p_ppal;
+                ok=0;
+                timer=0;
+                TocaNota(SILENCIO, 0);
+            }
             break;
 
         }
-        // LED blink
-        GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1,
-        (GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1) ^ GPIO_PIN_1));
+        Dibuja();
+
+
     }
 
     return 0;

@@ -577,7 +577,35 @@ unsigned int FT800_IncCMDOffset(unsigned int Current_Offset, byte Command_Size)
 
     return New_Offset;
 }
+void ComProgbar(int x, int y, int w, int h, int ops, int val, int size, int range)
+{
 
+    EscribeRam32(CMD_PROGRESS);
+    EscribeRam16(x);
+    EscribeRam16(y);
+    EscribeRam16(w);
+    EscribeRam16(h);
+    EscribeRam16(ops);
+    EscribeRam16(val);
+    EscribeRam16(size);
+    EscribeRam16(range);
+
+}
+
+void ComGauge(int x, int y, int r, int ops, int maj, int min, int val, int range)
+{
+
+    EscribeRam32(CMD_GAUGE);
+    EscribeRam16(x);
+    EscribeRam16(y);
+    EscribeRam16(r);
+    EscribeRam16(ops);
+    EscribeRam16(maj);
+    EscribeRam16(min);
+    EscribeRam16(val);
+    EscribeRam16(range);
+
+}
 
 
 

@@ -117,6 +117,9 @@ prueba2.obj: C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/xloc
 prueba2.obj: C:/ti/TivaWare_C_Series-2.2.0.295/utils/uartstdio.h
 prueba2.obj: C:/ti/TivaWare_C_Series-2.2.0.295/third_party/lwip-1.4.1/apps/httpserver_raw/httpd.h
 prueba2.obj: C:/ti/TivaWare_C_Series-2.2.0.295/examples/boards/ek-tm4c1294xl/drivers/pinout.h
+prueba2.obj: C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/math.h
+prueba2.obj: C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/_defs.h
+prueba2.obj: C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/machine/_limits.h
 prueba2.obj: ../HAL_I2C.h
 prueba2.obj: ../sensorlib2.h
 prueba2.obj: ../FT800_TIVA.h
@@ -354,6 +357,12 @@ C:/ti/TivaWare_C_Series-2.2.0.295/utils/uartstdio.h:
 C:/ti/TivaWare_C_Series-2.2.0.295/third_party/lwip-1.4.1/apps/httpserver_raw/httpd.h:
 
 C:/ti/TivaWare_C_Series-2.2.0.295/examples/boards/ek-tm4c1294xl/drivers/pinout.h:
+
+C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/math.h:
+
+C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/_defs.h:
+
+C:/ti/ccs1281/ccs/tools/compiler/ti-cgt-arm_18.2.7.LTS/include/machine/_limits.h:
 
 ../HAL_I2C.h:
 
